@@ -202,38 +202,47 @@
         localStorage.setItem(DASHBOARD_STATE_KEY, JSON.stringify(state));
       }
 
+      function getDashboardState() {
+        return readDashboardState();
+      }
+
+      function setDashboardState(nextState) {
+        writeDashboardState(nextState);
+        return nextState;
+      }
+
       function handleLocalRequest(url, options = {}) {
         const method = (options.method || 'GET').toUpperCase();
         const path = url.replace(/^https?:\/\/[^/]+/, '');
 
         if (method === 'GET' && path === '/workers') {
-          return readDashboardState().workers;
+          return getDashboardState().workers;
         }
 
         if (method === 'POST' && path === '/workers') {
           const payload = JSON.parse(options.body || '{}');
-          const state = readDashboardState();
+          const state = getDashboardState();
           const worker = {
             id: `worker-${Date.now()}-${Math.random().toString(16).slice(2)}`,
             ...payload,
           };
           state.workers = [...state.workers, worker];
-          writeDashboardState(state);
+          setDashboardState(state);
           return worker;
         }
 
         if (method === 'DELETE') {
           const workerId = path.split('/').filter(Boolean)[1];
-          const state = readDashboardState();
+          const state = getDashboardState();
           state.workers = state.workers.filter((worker) => worker.id !== workerId);
           state.attendance = state.attendance.filter((entry) => entry.workerId !== workerId);
-          writeDashboardState(state);
+          setDashboardState(state);
           return {};
         }
 
         if (method === 'POST' && path === '/attendance') {
           const payload = JSON.parse(options.body || '{}');
-          const state = readDashboardState();
+          const state = getDashboardState();
           const entry = {
             id: `attendance-${Date.now()}-${Math.random().toString(16).slice(2)}`,
             workerId: payload.workerId,
@@ -241,13 +250,13 @@
             status: payload.status,
           };
           state.attendance = [...state.attendance, entry];
-          writeDashboardState(state);
+          setDashboardState(state);
           return entry;
         }
 
         if (method === 'GET' && path.startsWith('/reports/')) {
           const month = path.split('/').filter(Boolean)[1];
-          const state = readDashboardState();
+          const state = getDashboardState();
           return state.workers.map((worker) => {
             const entries = state.attendance.filter((entry) => entry.workerId === worker.id && entry.date.startsWith(month));
             const present = entries.filter((entry) => entry.status === 'present').length;
