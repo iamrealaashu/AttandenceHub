@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Attendance Hub</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #07111f;
+        --panel: #10213a;
+        --accent: #28c76f;
+        --accent-2: #ff9f43;
+        --text: #f4f7fb;
+        --muted: #94a3b8;
+        --danger: #ff5c5c;
+      }
+      body { margin: 0; font-family: Arial, sans-serif; background: linear-gradient(135deg, var(--bg), #0f2746); color: var(--text); }
+      .container { max-width: 1200px; margin: 0 auto; padding: 20px; box-sizing: border-box; }
+      .card { background: rgba(16,33,58,0.95); border-radius: 16px; padding: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.25); margin-bottom: 16px; }
+      .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+      input, select, button { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #2d4b72; margin-top: 8px; font-size: 14px; box-sizing: border-box; }
+      button { background: var(--accent); color: #04210d; font-weight: bold; cursor: pointer; border: none; }
+      button.secondary { background: var(--accent-2); color: #2b1600; }
+      button.danger { background: var(--danger); color: white; }
+      .muted { color: var(--muted); font-size: 13px; }
+      .hidden { display: none; }
+      .message { padding: 8px 10px; border-radius: 8px; margin-top: 8px; font-size: 13px; }
+      .message.error { background: rgba(255,92,92,0.2); color: #ffd5d5; }
+      .message.success { background: rgba(40,199,111,0.2); color: #d8ffe2; }
+      .worker-list { list-style: none; padding: 0; margin: 0; }
+      .worker-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #223a54; }
+      .chip-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+      .chip { transition: transform 0.2s ease, background 0.2s ease; }
+      .chip:hover { transform: translateY(-1px); }
+      .chip { padding: 6px 10px; border-radius: 999px; background: #18324f; cursor: pointer; font-size: 12px; }
+      .chip.active { background: var(--accent); color: #03240e; }
+      table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+      th, td { padding: 10px; border-bottom: 1px solid #223a54; text-align: left; }
+      .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+      .topbar h3 { margin: 0; }
+      .auth-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+      .dashboard-toolbar { display: flex; justify-content: flex-end; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+      .profile-shell { display: flex; align-items: center; gap: 10px; margin-left: auto; flex-wrap: wrap; }
+      .profile-btn { width: 48px; height: 48px; min-width: 48px; border-radius: 50%; display: grid; place-items: center; font-size: 22px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.16); color: var(--text); }
+      .profile-panel { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; padding: 14px; margin-bottom: 16px; }
+      .profile-summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .profile-user { display: flex; flex-direction: column; gap: 2px; }
+      .profile-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+      .profile-panel form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+      .profile-panel input { margin-top: 0; min-width: 220px; }
+      .dashboard-locked { opacity: 0.7; }
+      .chip-disabled { opacity: 0.5; pointer-events: none; }
+      @media (max-width: 900px) {
+        .grid { grid-template-columns: 1fr; }
+        .container { padding: 16px; }
+        .profile-shell { width: 100%; justify-content: flex-end; }
+      }
+
+      @media (max-width: 640px) {
+        body { font-size: 15px; }
+        .container { padding: 12px; }
+        .card { padding: 14px; }
+        .dashboard-toolbar { justify-content: center; }
+        .profile-shell { justify-content: center; margin-left: 0; }
+        .profile-panel form { flex-direction: column; align-items: stretch; }
+        .profile-panel input { min-width: 0; width: 100%; }
+        .topbar { flex-direction: column; align-items: flex-start; }
+        .chip-row { gap: 6px; }
+        .chip { width: 100%; text-align: center; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div id="dashboardView">
+        <div class="dashboard-toolbar">
+          <div class="profile-shell">
+            <div id="profileSummary" class="profile-summary">
+              <button class="profile-btn" id="profileBtn" type="button" aria-label="Register profile">👤</button>
+              <div class="profile-actions">
+                <div class="profile-user">
+                  <strong id="profileLabel">Profile</strong>
+                  <div id="profileStatus" class="muted">Tap to register</div>
+                </div>
+                <button class="secondary hidden" id="logoutBtn" type="button">Logout</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="profilePanel" class="profile-panel hidden">
+          <form id="profileForm">
+            <input id="profileName" placeholder="Your name" required />
+            <input id="profilePhone" placeholder="Phone number" required />
+            <button type="submit">Register</button>
+          </form>
+          <div id="profileMessage" class="message"></div>
+        </div>
+
+        <h1>Attendance Hub Dashboard</h1>
+        <p class="muted" id="welcomeText">Welcome</p>
+        <div class="grid">
+          <section class="card">
+            <h3>Add worker</h3>
+            <form id="workerForm">
+              <input id="name" placeholder="Worker name" required />
+              <input id="phone" placeholder="Phone number" required />
+              <input id="dailyWage" placeholder="Daily wage" type="number" min="0" step="0.01" required />
+              <button type="submit">Add worker</button>
+            </form>
+          </section>
+          <section class="card">
+            <div class="topbar">
+              <h3>Workers</h3>
+              <input id="search" placeholder="Search by name or phone" />
+            </div>
+            <ul id="workerList" class="worker-list"></ul>
+          </section>
+        </div>
+
+        <section class="card">
+          <h3>Quick attendance</h3>
+          <div class="muted">Select a worker and mark attendance for today.</div>
+          <div class="chip-row" id="statusOptions">
+            <span class="chip active" data-status="present">Present</span>
+            <span class="chip" data-status="half-day">Half day</span>
+            <span class="chip" data-status="absent">Absent</span>
+          </div>
+          <div class="grid" style="margin-top: 12px;">
+            <select id="workerSelect"></select>
+            <input id="attendanceDate" type="date" />
+            <button id="markAttendanceBtn">Mark attendance</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <h3>Monthly report</h3>
+          <input id="monthInput" type="month" />
+          <table>
+            <thead>
+              <tr><th>Worker</th><th>Phone</th><th>Daily wage</th><th>Present</th><th>Half-day</th><th>Absent</th><th>Working days</th><th>Monthly salary</th></tr>
+            </thead>
+            <tbody id="reportBody"></tbody>
+          </table>
+        </section>
+      </div>
+    </div>
+
+    <script>
+      const API = 'http://localhost:3001';
+      const sessionId = () => localStorage.getItem('attendanceSessionId');
+      const dashboardView = document.getElementById('dashboardView');
+      const welcomeText = document.getElementById('welcomeText');
+      const profileBtn = document.getElementById('profileBtn');
+      const profilePanel = document.getElementById('profilePanel');
+      const profileForm = document.getElementById('profileForm');
+      const profileNameInput = document.getElementById('profileName');
+      const profilePhoneInput = document.getElementById('profilePhone');
+      const profileLabel = document.getElementById('profileLabel');
+      const profileStatus = document.getElementById('profileStatus');
+      const profileMessage = document.getElementById('profileMessage');
+      const workerForm = document.getElementById('workerForm');
+      const workerList = document.getElementById('workerList');
+      const workerSelect = document.getElementById('workerSelect');
+      const searchInput = document.getElementById('search');
+      const reportBody = document.getElementById('reportBody');
+      const monthInput = document.getElementById('monthInput');
+      const attendanceDate = document.getElementById('attendanceDate');
+      const statusOptions = document.getElementById('statusOptions');
+      const logoutBtn = document.getElementById('logoutBtn');
+      const PROFILE_STORAGE_KEY = 'attendanceProfile';
+      let workers = [];
+      let selectedStatus = 'present';
+      let profile = null;
+
+      function showMessage(element, message, type) {
+        element.className = `message ${type}`;
+        element.textContent = message;
+      }
+
+      function showDashboard() {
+        dashboardView.classList.remove('hidden');
+        setToday();
+      }
+
+      function loadProfile() {
+        try {
+          const saved = localStorage.getItem(PROFILE_STORAGE_KEY);
+          return saved ? JSON.parse(saved) : null;
+        } catch (error) {
+          return null;
+        }
+      }
+
+      function saveProfile(nextProfile) {
+        localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(nextProfile));
+        profile = nextProfile;
+      }
+
+      function clearProfile() {
+        localStorage.removeItem(PROFILE_STORAGE_KEY);
+        profile = null;
+      }
+
+      function isProfileRegistered() {
+        return Boolean(profile && profile.name && profile.phone);
+      }
+
+      function applyDashboardLock() {
+        if (isProfileRegistered()) {
+          dashboardView.classList.remove('dashboard-locked');
+        } else {
+          dashboardView.classList.add('dashboard-locked');
+        }
+
+        if (isProfileRegistered()) {
+          logoutBtn.classList.add('hidden');
+        } else {
+          logoutBtn.classList.add('hidden');
+        }
+
+        const interactiveElements = dashboardView.querySelectorAll('input, select, button, .chip');
+        interactiveElements.forEach((element) => {
+          if (element === profileBtn || element === logoutBtn || element.closest('#profilePanel')) return;
+
+          if (element.classList.contains('chip')) {
+            element.classList.toggle('chip-disabled', !isProfileRegistered());
+            element.style.pointerEvents = isProfileRegistered() ? 'auto' : 'none';
+            return;
+          }
+
+          if (element.tagName === 'BUTTON') {
+            element.disabled = !isProfileRegistered();
+          } else if (element.tagName === 'INPUT' || element.tagName === 'SELECT') {
+            element.disabled = !isProfileRegistered();
+          }
+        });
+      }
+
+      function updateProfileUI() {
+        if (isProfileRegistered()) {
+          profileLabel.textContent = profile.name;
+          profileStatus.textContent = profile.phone;
+          profilePanel.classList.add('hidden');
+          welcomeText.textContent = `Welcome, ${profile.name}`;
+        } else {
+          profileLabel.textContent = 'Profile';
+          profileStatus.textContent = 'Tap to register';
+          profilePanel.classList.add('hidden');
+          welcomeText.textContent = 'Welcome';
+        }
+      }
+
+      function todayString() {
+        const now = new Date();
+        return now.toISOString().split('T')[0];
+      }
+
+      function setToday() {
+        const date = todayString();
+        attendanceDate.value = date;
+        monthInput.value = date.slice(0, 7);
+      }
+
+      function renderWorkers() {
+        const query = searchInput.value.toLowerCase();
+        const filtered = workers.filter((worker) => `${worker.name} ${worker.phone}`.toLowerCase().includes(query));
+        workerList.innerHTML = '';
+        workerSelect.innerHTML = '';
+
+        filtered.forEach((worker) => {
+          const li = document.createElement('li');
+          li.className = 'worker-item';
+          const removeButton = document.createElement('button');
+          removeButton.className = 'secondary';
+          removeButton.type = 'button';
+          removeButton.textContent = 'Remove';
+          removeButton.disabled = !isProfileRegistered();
+          removeButton.addEventListener('click', () => deleteWorker(worker.id));
+
+          const info = document.createElement('div');
+          info.innerHTML = `<strong>${worker.name}</strong><div class="muted">${worker.phone} · ₹${Number(worker.dailyWage).toFixed(2)}/day</div>`;
+
+          const actions = document.createElement('div');
+          actions.appendChild(removeButton);
+
+          li.appendChild(info);
+          li.appendChild(actions);
+          workerList.appendChild(li);
+
+          const option = document.createElement('option');
+          option.value = worker.id;
+          option.textContent = worker.name;
+          workerSelect.appendChild(option);
+        });
+      }
+
+      async function fetchJson(url, options = {}) {
+        const headers = options.headers || {};
+        const sid = sessionId();
+        if (sid) headers['x-session-id'] = sid;
+        const response = await fetch(url, { ...options, headers });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.message || 'Request failed');
+        }
+        return payload;
+      }
+
+      async function loadWorkers() {
+        workers = await fetchJson(`${API}/workers`);
+        renderWorkers();
+      }
+
+      async function loadReport() {
+        const month = monthInput.value || todayString().slice(0, 7);
+        const rows = await fetchJson(`${API}/reports/${month}`);
+        reportBody.innerHTML = '';
+        rows.forEach((row) => {
+          const wage = Number(row.dailyWage || 0);
+          const salary = Number(row.monthlySalary || 0);
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${row.workerName}</td><td>${row.phone}</td><td>${wage.toFixed(2)}</td><td>${row.present}</td><td>${row.halfDay}</td><td>${row.absent}</td><td>${row.workingDays}</td><td>${salary.toFixed(2)}</td>`;
+          reportBody.appendChild(tr);
+        });
+      }
+
+      async function initializeDashboard() {
+        profile = loadProfile();
+        updateProfileUI();
+        showDashboard();
+        applyDashboardLock();
+
+        if (!isProfileRegistered()) {
+          return;
+        }
+
+        try {
+          await loadWorkers();
+          await loadReport();
+        } catch (error) {
+          console.error('Unable to load worker or report data:', error);
+        }
+      }
+
+      profileBtn.addEventListener('click', () => {
+        if (isProfileRegistered()) {
+          logoutBtn.classList.toggle('hidden');
+          if (!logoutBtn.classList.contains('hidden')) {
+            profilePanel.classList.add('hidden');
+          }
+        } else {
+          profilePanel.classList.toggle('hidden');
+          if (!profilePanel.classList.contains('hidden')) {
+            profileNameInput.focus();
+          }
+        }
+      });
+
+      profileForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const name = profileNameInput.value.trim();
+        const phone = profilePhoneInput.value.trim();
+
+        if (!name || !phone) {
+          showMessage(profileMessage, 'Please enter both name and phone.', 'error');
+          return;
+        }
+
+        saveProfile({ name, phone });
+        updateProfileUI();
+        applyDashboardLock();
+        showMessage(profileMessage, 'Profile registered. You can now use the dashboard.', 'success');
+        profilePanel.classList.add('hidden');
+      });
+
+      workerForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const payload = {
+          name: document.getElementById('name').value,
+          phone: document.getElementById('phone').value,
+          dailyWage: Number(document.getElementById('dailyWage').value),
+        };
+        await fetchJson(`${API}/workers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        workerForm.reset();
+        await loadWorkers();
+        await loadReport();
+      });
+
+      searchInput.addEventListener('input', renderWorkers);
+      monthInput.addEventListener('change', loadReport);
+
+      statusOptions.addEventListener('click', (event) => {
+        const chip = event.target.closest('.chip');
+        if (!chip) return;
+        selectedStatus = chip.dataset.status;
+        [...statusOptions.children].forEach((item) => item.classList.toggle('active', item === chip));
+      });
+
+      document.getElementById('markAttendanceBtn').addEventListener('click', async () => {
+        const workerId = workerSelect.value;
+        if (!workerId) return;
+        await fetchJson(`${API}/attendance`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workerId, date: attendanceDate.value, status: selectedStatus }) });
+        await loadReport();
+      });
+
+      logoutBtn.addEventListener('click', () => {
+        clearProfile();
+        updateProfileUI();
+        applyDashboardLock();
+        logoutBtn.classList.add('hidden');
+        profilePanel.classList.remove('hidden');
+        profileNameInput.focus();
+      });
+
+      initializeDashboard();
+
+      window.deleteWorker = async function deleteWorker(workerId) {
+        await fetchJson(`${API}/workers/${workerId}`, { method: 'DELETE' });
+        await loadWorkers();
+        await loadReport();
+      };
+
+    </script>
+  </body>
+</html>

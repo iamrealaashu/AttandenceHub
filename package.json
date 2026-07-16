@@ -1,0 +1,9 @@
+{
+  "name": "attendance-management",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "cd server && npm start",
+    "test": "cd server && npm test"
+  }
+}
