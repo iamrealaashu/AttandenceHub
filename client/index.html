@@ -148,8 +148,9 @@
     </div>
 
     <script>
-      const API = 'http://localhost:3001';
+      const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:3001' : '';
       const sessionId = () => localStorage.getItem('attendanceSessionId');
+      const DASHBOARD_STATE_KEY = 'attendanceDashboardState';
       const dashboardView = document.getElementById('dashboardView');
       const welcomeText = document.getElementById('welcomeText');
       const profileBtn = document.getElementById('profileBtn');
@@ -182,6 +183,92 @@
       function showDashboard() {
         dashboardView.classList.remove('hidden');
         setToday();
+      }
+
+      function readDashboardState() {
+        try {
+          const value = localStorage.getItem(DASHBOARD_STATE_KEY);
+          const parsed = value ? JSON.parse(value) : { workers: [], attendance: [] };
+          return {
+            workers: Array.isArray(parsed.workers) ? parsed.workers : [],
+            attendance: Array.isArray(parsed.attendance) ? parsed.attendance : [],
+          };
+        } catch (error) {
+          return { workers: [], attendance: [] };
+        }
+      }
+
+      function writeDashboardState(state) {
+        localStorage.setItem(DASHBOARD_STATE_KEY, JSON.stringify(state));
+      }
+
+      function handleLocalRequest(url, options = {}) {
+        const method = (options.method || 'GET').toUpperCase();
+        const path = url.replace(/^https?:\/\/[^/]+/, '');
+
+        if (method === 'GET' && path === '/workers') {
+          return readDashboardState().workers;
+        }
+
+        if (method === 'POST' && path === '/workers') {
+          const payload = JSON.parse(options.body || '{}');
+          const state = readDashboardState();
+          const worker = {
+            id: `worker-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            ...payload,
+          };
+          state.workers = [...state.workers, worker];
+          writeDashboardState(state);
+          return worker;
+        }
+
+        if (method === 'DELETE') {
+          const workerId = path.split('/').filter(Boolean)[1];
+          const state = readDashboardState();
+          state.workers = state.workers.filter((worker) => worker.id !== workerId);
+          state.attendance = state.attendance.filter((entry) => entry.workerId !== workerId);
+          writeDashboardState(state);
+          return {};
+        }
+
+        if (method === 'POST' && path === '/attendance') {
+          const payload = JSON.parse(options.body || '{}');
+          const state = readDashboardState();
+          const entry = {
+            id: `attendance-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            workerId: payload.workerId,
+            date: payload.date,
+            status: payload.status,
+          };
+          state.attendance = [...state.attendance, entry];
+          writeDashboardState(state);
+          return entry;
+        }
+
+        if (method === 'GET' && path.startsWith('/reports/')) {
+          const month = path.split('/').filter(Boolean)[1];
+          const state = readDashboardState();
+          return state.workers.map((worker) => {
+            const entries = state.attendance.filter((entry) => entry.workerId === worker.id && entry.date.startsWith(month));
+            const present = entries.filter((entry) => entry.status === 'present').length;
+            const halfDay = entries.filter((entry) => entry.status === 'half-day').length;
+            const absent = entries.filter((entry) => entry.status === 'absent').length;
+            const workingDays = present + halfDay + absent;
+            const monthlySalary = Number(worker.dailyWage || 0) * (present + halfDay * 0.5);
+            return {
+              workerName: worker.name,
+              phone: worker.phone,
+              dailyWage: Number(worker.dailyWage || 0),
+              present,
+              halfDay,
+              absent,
+              workingDays,
+              monthlySalary,
+            };
+          });
+        }
+
+        return {};
       }
 
       function loadProfile() {
@@ -300,12 +387,21 @@
         const headers = options.headers || {};
         const sid = sessionId();
         if (sid) headers['x-session-id'] = sid;
-        const response = await fetch(url, { ...options, headers });
-        const payload = await response.json();
-        if (!response.ok) {
-          throw new Error(payload.message || 'Request failed');
+
+        if (!API) {
+          return handleLocalRequest(url, options);
         }
-        return payload;
+
+        try {
+          const response = await fetch(`${API}${url}`, { ...options, headers });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.message || 'Request failed');
+          }
+          return payload;
+        } catch (error) {
+          return handleLocalRequest(url, options);
+        }
       }
 
       async function loadWorkers() {
